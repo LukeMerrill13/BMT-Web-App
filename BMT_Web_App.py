@@ -30,12 +30,14 @@ df = df.rename(columns={'Planned Dates:Duration (months)': 'Duration (years)',
                         })
 
 years = list(range(int(df['Award Year'].min()), int(df['End Year'].max())+1))
+
+
 def AnnualSpending(threesixty_data):
     data = pd.DataFrame()
     for index,row in threesixty_data.iterrows():
         list = []
         for year in years:
-            if year < int(row['Award Year']) or year >= int(row['End Year']):
+            if year < row['Award Date'].year or year >= row['End Date'].year:
                 list.append(0)
             else:
                 list.append(row['Grant'])
@@ -72,8 +74,9 @@ def current_grants():
             pa = data.copy()
             pa['Active'] = (pa['Award Date'] <= selected_date) & (selected_date <= pa['End Date'])
             return pa.groupby(['Programme'], as_index=False)['Active'].sum()
-
-        selected_date = pd.Timestamp(st.date_input(''))
+        
+        today = datetime.date.today()
+        selected_date = pd.Timestamp(st.date_input('', min_value=today, value=today))
         Portfolio_Allocation = PortfolioAllocation(selected_date)
 
         figp = px.pie(
@@ -101,8 +104,10 @@ def current_grants():
         st.plotly_chart(figp, use_container_width=False)
 
     with col2:
-        default_index = date.today().year - 2020
-        selected_year = st.selectbox('', (years[0:-1]), index=default_index)
+        today_year = datetime.date.today().year
+        valid_years = [y for y in years if y >= today_year]
+        default_index = 0
+        selected_year = st.selectbox('', (valid_years), index=default_index, key = "first box")
 
         figx = px.pie(
             Annual_Spending,
@@ -119,8 +124,8 @@ def current_grants():
         st.plotly_chart(figx, use_container_width=False)
 
     with col3:
-        default_index = date.today().year - 2020
-        selectedYear = st.selectbox('', (years), index=default_index)
+        default_index = 0
+        selectedYear = st.selectbox('', (valid_years), index=default_index, key = "second box")
         Funds = ['Used', 'Available']
         Value = [sum(Annual_Spending[selectedYear]), 1000000 - sum(Annual_Spending[selectedYear])]
         Budget = pd.DataFrame([Funds, Value]).transpose()
@@ -216,12 +221,206 @@ def historic_grants ():
 def grant_calculator ():
     import streamlit as st    
 
-    st.write(" ### Grant Calculator")
+    pa = data.copy()
 
-    st.write(" #### Discontinued Grants")
-    st.write(" #### Current Grants")
-    st.write(" #### New Grants")
-    st.write(" #### Discontinued Grants")
+    # --- Assume pa already exists (source data, unchanged) ---
+    # Columns: Organisation, Programme, Grant, Duration (years), Award Date, End Date
+    
+
+# Initialize an empty new_grants with same columns & dtypes as pa (only once per session)
+    if "new_grants" not in st.session_state:
+        st.session_state.new_grants = pd.DataFrame({
+            c: pd.Series(dtype=pa[c].dtype) for c in pa.columns
+        })
+    
+    new_grants = st.session_state.new_grants  # convenience alias
+    
+    # Programme options come from pa
+    programme_options = sorted([p for p in pa['Programme'].dropna().unique().tolist()])
+    
+    st.subheader("Add new grants")
+    
+    with st.form("manual_add_new_grants"):
+        col1, col2, col3, col4, col5 = st.columns(5)
+    
+        organisation = col1.text_input("Organisation", key="org_input")
+    
+        programmes = col2.selectbox(
+            "Programme",
+            options=programme_options,
+            help="Select the relevant programme",
+            key="prog_multiselect",
+        )
+    
+        grant = col3.number_input(
+            "Grant",
+            min_value=0.0,
+            step=1000.0,
+            format="%.2f",
+            help="Enter the value of the grant per annum",
+            key="grant_input",
+        )
+    
+        duration_years = col4.number_input(
+            "Duration (years)",
+            min_value=0.0,
+            step=0.5,
+            format="%.2f",
+            help="Enter the number of years the grant will run for",
+            key="duration_input",
+        )
+    
+        today = datetime.date.today()
+        award_date = col5.date_input(
+            "Award Date",
+            value=today,
+            key="award_date_input",
+        )
+    
+        submitted = st.form_submit_button("Add grant", use_container_width=True)
+    
+    
+    if submitted:
+        # --- Validation ---
+        errors = []
+        if not organisation.strip():
+            errors.append("Organisation is required.")
+        if not programmes:
+            errors.append("Select at least one Programme.")
+        if float(duration_years) <= 0:
+            errors.append("Duration (years) must be greater than 0.")
+    
+        if errors:
+            for e in errors:
+                st.error(e)
+        else:
+            # Use provided duration; compute End Date = Award Date + Duration (years)
+            duration_years_calc = float(duration_years)
+    
+            # Compute end date (approximate: 365.25-day years to handle leap years on average)
+            award_ts = pd.to_datetime(award_date)
+            end_date = award_ts + pd.to_timedelta(duration_years_calc * 365.25, unit="D")
+    
+            # Build a single new row; Programme stores the list from multiselect
+            new_rows_df = pd.DataFrame([{
+                "Organisation": organisation.strip(),
+                "Programme": programmes,                      # list in a single cell
+                "Grant": float(grant),
+                "Duration (years)": duration_years_calc,
+                "Award Date": award_ts,
+                "End Date": end_date,
+            }])
+    
+            # Append to the separate dataset
+            st.session_state.new_grants = pd.concat(
+                [st.session_state.new_grants, new_rows_df],
+                ignore_index=True
+            )
+            new_grants = st.session_state.new_grants
+    
+            st.success("New grant created")
+
+    st.subheader("Existing Grants")
+    st.data_editor(pa, 
+                   use_container_width=True,
+                   num_rows='dynamic',
+                   hide_index=True)
+    
+    st.subheader("New Grants")
+    st.data_editor(new_grants, 
+                   use_container_width=True,
+                   num_rows='dynamic',
+                   hide_index=True)
+
+
+    # A separate button to clear new_grants (keeps 'always starts empty' easy to restore)
+    if st.button("Remove new grants", use_container_width=True, key="clear_new_grants"):
+        st.session_state.new_grants = st.session_state.new_grants.iloc[0:0]
+        new_grants = st.session_state.new_grants
+        st.info("new grants cleared")
+        
+        
+        
+    st.subheader("Spending trajectory")
+    
+    
+    if "new_portfolio" not in st.session_state:
+        st.session_state.new_portfolio = pd.concat(
+            [pa, new_grants.reindex(columns=pa.columns)],
+            ignore_index=True
+        )
+        
+    new_portfolio = st.session_state.new_portfolio
+
+    years = list(range(pd.to_datetime(new_portfolio['Award Date']).dt.year.min(), pd.to_datetime(new_portfolio['End Date']).dt.year.max()+1))
+
+    def AnnualSpending(threesixty_data):
+        data = pd.DataFrame()
+        for index,row in threesixty_data.iterrows():
+            list = []
+            for year in years:
+                if year < row['Award Date'].year or year >= row['End Date'].year:
+                    list.append(0)
+                else:
+                    list.append(row['Grant'])
+            data[index] = list 
+        return(data)
+        
+    NP = AnnualSpending(new_portfolio).transpose().join(new_portfolio['Programme']).groupby(['Programme']).sum()
+    NP = NP.set_axis(years, axis='columns').reset_index()
+    
+
+    NP = NP.set_index('Programme').transpose().reset_index().rename(columns={'index': 'Year'})
+    NP = NP[NP['Year'].astype(int) >= (datetime.date.today().year)]
+    
+    
+    
+    fig1 = px.bar(
+        NP,
+        x='Year',
+        y=[
+            "Causes Local to Blackburn, Lancashire",
+            "Art in the North West of England",
+            "Prevention and Relief of Human Suffering",
+        ],
+        color_discrete_map={
+            "Prevention and Relief of Human Suffering": "#FF9900",
+            "Causes Local to Blackburn, Lancashire": "#565656",
+            "Art in the North West of England": "#E2E2E2",
+        },
+    )
+    fig1.update_layout(yaxis_title="Value (£)", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=0.75))
+    fig1.add_shape(type="line", x0=datetime.date.today().year - 0.5, x1=NP['Year'].max()+0.5, y0=1200000, y1=1200000, line=dict(color='red', width=2, dash="dash"))
+    fig1.update_yaxes(range=[0, 1500000])
+    fig1.update_xaxes(range=[datetime.date.today().year - 0.5 ,NP['Year'].max()+0.5])
+    
+    fig1.update_layout(legend_title_text="Programme")
+    
+        
+    st.plotly_chart(fig1, use_container_width=False)    
+   
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    st.subheader("Current Grants")
+    st.subheader("New Grants")
+    st.subheader("Discontinued Grants")
+    
+    
     
     
     
