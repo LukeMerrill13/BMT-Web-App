@@ -68,10 +68,31 @@ st.markdown("<h1 style='text-align: center; color: white;'>The Brian Mercer Trus
 
 def home():
     import streamlit as st
-    st.write("Next trustee meeting: Wednesday 5th September, 2024")
-    st.write(" ###  News and Updates from our Charities")
-    st.write(" ###  New Applications")
-    st.write(" ###  Expiring Grants")
+    
+    
+    st.subheader("Documents for Next Meeting")
+    
+    FOLDER_ID = "1IGTuJgKMvquYseKmifh6OkA1PkuUiRhc"
+    url = f"https://drive.google.com/embeddedfolderview?id={FOLDER_ID}#list"
+    st.components.v1.iframe(url, height=280, width = 1300, scrolling=True)
+    
+    
+    st.subheader("Updates and Reports")
+    
+    FOLDER_ID = "1pMVoPCMFzmElMMO9o3JdekyRgP6UnQKL"
+    url = f"https://drive.google.com/embeddedfolderview?id={FOLDER_ID}#grid"
+    st.components.v1.iframe(url, height=280, width = 1300, scrolling=True)
+    
+    
+    st.subheader("Expiring Grants")
+
+    expiring = data[["Organisation", "Programme", "Grant", "End Date"]]
+    expiring = expiring[expiring["End Date"] <= pd.Timestamp.today().normalize() + pd.DateOffset(years=1)]
+    
+    st.dataframe(expiring.sort_values(by=["End Date"], ascending=True), use_container_width=True, hide_index=True)
+
+
+
 
 def current_grants():
     import streamlit as st   
