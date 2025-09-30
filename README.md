@@ -1,1 +1,1 @@
-## Brian Mercer Trust (BMT) Web Application
+# Brian Mercer Trust (BMT) Web Application
