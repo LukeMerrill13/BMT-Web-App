@@ -6,7 +6,10 @@ Created on Tue Aug 20 10:54:25 2024
 @author: luke
 """
 
+
 # Importing packages
+
+import os
 import pandas as pd
 import datetime
 from datetime import timedelta, date
@@ -14,7 +17,7 @@ from dateutil.relativedelta import relativedelta
 import plotly.express as px
 
 # Manipulating the data
-df = pd.read_excel('/Users/luke/Documents/Python/BMT/BMT_360_Giving_Data.xlsx')
+df = pd.read_excel('https://www.brianmercertrust.org/_files/ugd/410fd0_04a89fa50e374c00bca521b187e64cb6.xlsx?dn=BMT%20360%20updated%20to%20June%2010%202025.xlsx')
 df = df[['Amount Awarded','Award Date','Planned Dates:Duration (months)','Recipient Org:Name', 'Grant Programme:Title']]
 df = df.fillna(0)
 df['End Date'] = df['Award Date'] + df['Planned Dates:Duration (months)'].astype('timedelta64[M]')
@@ -64,40 +67,45 @@ data = data[data["End Date"] > pd.Timestamp.now()].sort_values(by=["Programme", 
 # Streamlit Web App
 import streamlit as st
 
-st.markdown("<h1 style='text-align: center; color: white;'>The Brian Mercer Trust</h1>", unsafe_allow_html=True)
+st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
-def home():
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    st.image("/Users/luke/Documents/Portfolio/BMT/Code/BMT_logo.png", use_column_width=True)
+
+
+def homepage():
     import streamlit as st
     
-    
-    st.subheader("Documents for Next Meeting")
+    st.write("## Documents for Next Meeting")
     
     FOLDER_ID = "1IGTuJgKMvquYseKmifh6OkA1PkuUiRhc"
-    url = f"https://drive.google.com/embeddedfolderview?id={FOLDER_ID}#list"
+    url = f"https://drive.google.com/embeddedfolderview?id={FOLDER_ID}#grid"
     st.components.v1.iframe(url, height=280, width = 1300, scrolling=True)
     
     
-    st.subheader("Updates and Reports")
+    st.write("## Updates and Reports")
     
     FOLDER_ID = "1pMVoPCMFzmElMMO9o3JdekyRgP6UnQKL"
     url = f"https://drive.google.com/embeddedfolderview?id={FOLDER_ID}#grid"
     st.components.v1.iframe(url, height=280, width = 1300, scrolling=True)
     
     
-    st.subheader("Expiring Grants")
+    st.write("## Expiring Grants")
 
     expiring = data[["Organisation", "Programme", "Grant", "End Date"]]
     expiring = expiring[expiring["End Date"] <= pd.Timestamp.today().normalize() + pd.DateOffset(years=1)]
+    expiring["End Date"] = pd.to_datetime(expiring["End Date"]).dt.strftime("%d-%m-%Y")
     
-    st.dataframe(expiring.sort_values(by=["End Date"], ascending=True), use_container_width=True, hide_index=True)
+    st.dataframe(expiring.sort_values(by=["End Date"], ascending=False), use_container_width=True, hide_index=True)
 
 
 
 
-def current_grants():
+def current_portfolio():
     import streamlit as st   
     
-    st.subheader("Portfolio Allocation")
+    st.write("## Current Portfolio")
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -124,7 +132,8 @@ def current_grants():
         )
 
         figp.update_layout(
-            title_text="No. Organisations",
+            title="No. Grants",
+            font_size = 28,
             title_x=0.35,
             annotations=[dict(text=str(int(Portfolio_Allocation["Active"].sum())), x=0.5, y=0.5, font_size=80, showarrow=False)],
             showlegend=False,
@@ -151,7 +160,7 @@ def current_grants():
                 "Art in the North West of England": "#E2E2E2",
             },
         )
-        figx.update_layout(title_text="Investments", title_x=0.4, showlegend=False, hoverlabel=dict(font_size=20))
+        figx.update_layout(title=dict(text="Grant Allocation", x=0.29, font=dict(size=28)), showlegend=False, hoverlabel=dict(font_size=20))
         st.plotly_chart(figx, use_container_width=False)
 
     with col3:
@@ -172,6 +181,7 @@ def current_grants():
         )
         figb.update_layout(
             title_text="Remaining Budget",
+            
             title_x=0.35,
             annotations=[dict(text="£" + str(round(1200000 - sum(Annual_Spending[selectedYear]), 2)), x=0.5, y=0.5, font_size=40, showarrow=False)],
         )
@@ -180,7 +190,7 @@ def current_grants():
         figb.update_traces(textinfo='none')
         st.plotly_chart(figb, use_container_width=False)
 
-    st.subheader("Grant Timeline")
+    st.write("## Grant Timeline")
     gantt_df = df[df["End Date"] > pd.Timestamp.now()].sort_values(
         by=["Programme", "End Date"], ascending=[False, False]
         )
@@ -229,19 +239,15 @@ def current_grants():
     
     st.plotly_chart(fig, use_container_width=False)
 
-    st.subheader("Existing Grants")
+    st.write("## Existing Grants")
     st.dataframe(data.iloc[:,:-1], use_container_width = True, hide_index = True)
 
 def grant_calculator ():
     import streamlit as st    
-    
-   
-    # Page heading 
-    st.markdown("Calculate and forecast changes to the trust's portfolio by adding and renewing grants:")
 
     
     # Current grants
-    st.subheader("Current Grants")
+    st.write("## Current Grants")
     pa = data.copy()
     # OR, if you really only want pure dates (dtype = object of type date):
     pa["Award Date"] = pd.to_datetime(pa["Award Date"]).dt.date
@@ -288,7 +294,7 @@ def grant_calculator ():
     
     
     # New Grants
-    st.subheader("New Grants")
+    st.write("## New Grants")
     
     
     with st.form("manual_add_new_grants"):
@@ -421,7 +427,7 @@ def grant_calculator ():
     )
         
 
-    st.subheader("Grant Portfolio")
+    st.write("## Grant Portfolio")
     
     new_portfolio = pd.concat(
         [pa, st.session_state.new_grants.reindex(columns=pa.columns)],
@@ -554,7 +560,7 @@ def grant_calculator ():
 
     
     # Spendig Trajectory
-    st.subheader("Spending Forecast")
+    st.write("## Spending Forecast")
     
 
     def AnnualSpending(threesixty_data):
@@ -648,13 +654,14 @@ def historic_grants ():
     
 
 page_names_to_funcs = {
-    "Home": home,
-    "Current Portfolio": current_grants,
+    "Homepage": homepage,
+    "Current Portfolio": current_portfolio,
     "Grant Calculator": grant_calculator
 }
 
 demo_name = st.sidebar.selectbox("Select page", page_names_to_funcs.keys())
 page_names_to_funcs[demo_name]()
+
 
 
 
