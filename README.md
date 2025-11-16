@@ -12,6 +12,8 @@ The Trust manually updates these datasets whenever new grants are awarded to ens
 
 ## Running the application
 
-```git clone https://github.com/<your-org>/<your-repo>.git
+```
+git clone https://github.com/<your-org>/<your-repo>.git
 cd <your-repo>
-streamlit run BMT_Web_App.py```
+streamlit run BMT_Web_App.py
+```
